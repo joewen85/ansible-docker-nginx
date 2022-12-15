@@ -1,3 +1,48 @@
 ---
-- name: Docker | nginx restart
-  
+- name: Docker | shop nginx restart
+  community.docker.docker_container:
+    name: nginx
+    image: registry.yunzmall.com/yunzhong/shop:nginx
+    state: started
+    restart: true
+    restart_policy: always
+    links: php-fpm:php-fpm
+    networks:
+      - name: yzshop
+    network_mode: yzshop
+    env:
+      NGINX_HOST: "{{ domain }}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/confs/nginx/ssl:/etc/nginx/ssl:rw
+      - /data/logs/nginx:/var/log/nginx:rw
+      - "{{ webpath }}:/data/wwwroot/yzshop:rw"
+      #- /data/confs/nginx/templates:/etc/nginx/templates:rw
+  when: servicetag == "shop"
+
+- name: Docker | scm nginx restart
+  community.docker.docker_container:
+    name: nginx
+    image: registry.yunzmall.com/yunzhong/shop:nginx
+    state: started
+    restart: true
+    restart_policy: always
+    networks:
+      - name: yzshop
+    network_mode: yzshop
+    env:
+      NGINX_HOST: "{{ domain }}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/confs/nginx/ssl:/etc/nginx/ssl:rw
+      - /data/logs/nginx:/var/log/nginx:rw
+      - "{{ webpath }}:/data/wwwroot/yzshop:rw"
+      - /data/confs/nginx/templates:/etc/nginx/templates:rw
+      - /data/goSupply/uploads:/data/goSupply/uploads:rw
+  when: servicetag == "scm"
