@@ -1,0 +1,108 @@
+- name: create project folder
+  shell: mkdir -p /data/{confs,logs,wwwroot}
+
+- name: create project configs subfolder
+  shell: mkdir -p /data/confs/nginx
+
+- name: create project logs subfolder
+  shell: mkdir -p /data/logs/nginx
+
+- name: modify web path owner
+  file:
+    path: /data/wwwroot
+    owner: "9999"
+    group: "9999"
+
+- name: create supply uploads folder
+  ansible.builtin.file:
+    path: /data/goSupply/uploads
+    owner: "9999"
+    group: "9999"
+    recurse: yes
+    state: directory
+  when: servicetag == "scm"
+
+# nginx
+- name: create nginx config sub folder
+  shell: mkdir -p /data/confs/nginx/{ssl,templates}
+
+- name: shop config
+  copy:
+    src: default.conf.template
+    dest: /data/confs/nginx/templates/shop.conf.template
+  when: servicetag == "shop"
+
+- name: scm config
+  template:
+    src: scm.j2
+    dest: /data/confs/nginx/templates/scm.conf.template
+  when: servicetag == "scm"
+
+- name: ssl cert create
+  shell: echo "{{ cert_var }}" > /data/confs/nginx/ssl/web.pem
+
+- name: ssl priviate key create
+  shell: echo "{{ privatekey_var }}" > /data/confs/nginx/ssl/web.key
+
+- name: call python3
+  shell: rm -rf /usr/bin/python && ln -s /usr/bin/python3 /usr/bin/python
+  when: ansible_distribution == "CentOS" and ansible_distribution_major_version|int == 7
+
+- name: run scm service
+  community.docker.docker_container:
+    name: nginx
+    image: registry.yunzmall.com/yunzhong/shop:nginx
+    detach: yes
+    restart_policy: always
+    networks:
+      - name: yzshop
+    network_mode: yzshop
+    env:
+      NGINX_HOST: "{{ domain }}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/confs/nginx/ssl:/etc/nginx/ssl:rw
+      - /data/logs/nginx:/var/log/nginx:rw
+      - "{{ webpath }}:/data/wwwroot/yzshop:rw"
+      - /data/confs/nginx/templates:/etc/nginx/templates:rw
+      - /data/goSupply/uploads:/data/goSupply/uploads:rw
+  when: servicetag == "scm"
+
+- name: ln uploads folder
+  ansible.builtin.file:
+    src: /data/goSupply/uploads
+    dest: /data/wwwroot/yzshop/uploads
+    owner: "9999"
+    group: "9999"
+    state: link
+  when: servicetag == "scm"
+
+- name: run shop service
+  community.docker.docker_container:
+    name: nginx
+    image: registry.yunzmall.com/yunzhong/shop:nginx
+    detach: yes
+    restart_policy: always
+    links: php-fpm:php-fpm
+    networks:
+      - name: yzshop
+    network_mode: yzshop
+    env:
+      NGINX_HOST: "{{ domain }}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/confs/nginx/ssl:/etc/nginx/ssl:rw
+      - /data/logs/nginx:/var/log/nginx:rw
+      - "{{ webpath }}:/data/wwwroot/yzshop:rw"
+      #- /data/confs/nginx/templates:/etc/nginx/templates:rw
+  when: servicetag == "shop"
+
+- name: recovery python2
+  shell: rm -rf /usr/bin/python && ln -s /usr/bin/python2 /usr/bin/python
+  when: ansible_distribution == "CentOS" and ansible_distribution_major_version|int == 7
